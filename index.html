@@ -1,0 +1,340 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+	<title>Feliz cumple Camilu!</title>
+</head>
+   <!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Raspadita</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --accent: #22d3ee;
+      --text: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; 
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+      background: radial-gradient(1200px 800px at 80% -10%, #1f2937, var(--bg));
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .wrap {
+      width: min(92vw, 520px);
+    }
+    .title {
+      text-align: center;
+      margin: 0 0 10px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+    .card {
+      position: relative;
+      border-radius: 20px;
+      overflow: hidden;
+      background: linear-gradient(145deg, #0b1022, #0a0f1f);
+      box-shadow: 0 20px 60px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.05);
+    }
+    .prize {
+      aspect-ratio: 1.8 / 1; /* flexible alto */
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(60% 60% at 80% 20%, rgba(255,255,255,.08), transparent 60%),
+        radial-gradient(60% 60% at 20% 80%, rgba(255,255,255,.06), transparent 60%),
+        linear-gradient(135deg, #0ea5e9 0%, #22d3ee 35%, #a78bfa 100%);
+      color: #0b1022;
+      text-align: center;
+    }
+    .prize h2 { 
+      font-size: clamp(22px, 5vw, 36px);
+      margin: 0 0 6px; 
+    }
+    .prize p { 
+      margin: 0; 
+      opacity: .85; 
+      font-size: clamp(14px, 3.4vw, 16px);
+    }
+    canvas.scratch {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+      touch-action: none; /* Pointer Events smooth in mobile */
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      background: #0ea5e9;
+      border: none;
+      color: #041018;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .08s ease, filter .2s ease;
+    }
+    .btn:hover { filter: brightness(1.1); }
+    .btn:active { transform: translateY(1px) scale(.99); }
+    .meter {
+      height: 10px;
+      background: rgba(255,255,255,.08);
+      border-radius: 999px;
+      overflow: hidden;
+      flex: 1 1 160px;
+      min-width: 160px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+    }
+    .meter > i {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), #a78bfa);
+    }
+    .note {
+      text-align: center;
+      font-size: 13px;
+      opacity: .75;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+	  <h1 class="title">Camilu, si queres saber tu regalo, raspá y ganá</h1>
+
+    <div class="card" id="card">
+      <section class="prize" aria-live="polite" 
+         style="background: none; padding: 0;">
+  <img src="PHOTO-2025-09-05-00-41-59.jpg" 
+       alt="Premio" 
+       style="width:100%; display:block; border-radius:20px;">
+</section>
+		<!-- Contenido del premio (visible cuando raspás suficiente) -->
+      <section class="prize" aria-live="polite">
+        <div>
+			<h2>🎉 ¡Vamos a ver a la Bersuit!</h2>
+			<p>y con tu regalo, viene incluído un tatuaje juntos</p>
+        </div>
+      </section>
+		
+
+      <!-- Capa para raspar -->
+      <canvas class="scratch" id="scratchCanvas" aria-label="Área para raspar y revelar el premio"></canvas>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="resetBtn" type="button">Reiniciar</button>
+      <label class="btn" for="coverUpload" title="Subí una imagen para la capa a raspar">Usar imagen de cobertura</label>
+      <input id="coverUpload" type="file" accept="image/*" hidden />
+      <div class="meter" aria-hidden="true"><i id="meterFill"></i></div>
+    </div>
+
+    <p class="note">Tip: funciona con mouse o dedo. Revelá al menos el 60% para destapar el premio.</p>
+  </div>
+
+  <script>
+    // Utilidad: mapea coordenadas CSS a píxeles del canvas considerando DPR
+    function setupHiDPICanvas(canvas) {
+      const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+      const { width, height } = canvas.getBoundingClientRect();
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      return { ctx, dpr };
+    }
+
+    const canvas = document.getElementById('scratchCanvas');
+    const meterFill = document.getElementById('meterFill');
+    const resetBtn = document.getElementById('resetBtn');
+    const coverUpload = document.getElementById('coverUpload');
+
+    let ctx, dpr, drawing = false, lastPoint = null, cleared = false;
+    const BRUSH_RADIUS = 22; // en CSS px
+    const REVEAL_THRESHOLD = 0.60; // 60%
+
+    function drawCoverPattern(image) {
+      const { width, height } = canvas.getBoundingClientRect();
+      // Fondo base
+      ctx.clearRect(0, 0, width, height);
+      if (image) {
+        // Imagen subida como patrón
+        const pattern = ctx.createPattern(image, 'repeat');
+        ctx.fillStyle = pattern;
+        ctx.fillRect(0, 0, width, height);
+      } else {
+        // Capa metálica por defecto
+        const grd = ctx.createLinearGradient(0, 0, width, height);
+        grd.addColorStop(0, '#9ca3af');
+        grd.addColorStop(0.5, '#6b7280');
+        grd.addColorStop(1, '#d1d5db');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, width, height);
+        // Ruido suave
+        const NOISE_DOTS = Math.floor((width * height) / 120);
+        ctx.globalAlpha = 0.25;
+        for (let i = 0; i < NOISE_DOTS; i++) {
+          const x = Math.random() * width;
+          const y = Math.random() * height;
+          const r = Math.random() * 1.2;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fillStyle = `hsl(210, 6%, ${60 + Math.random() * 20}%)`;
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        // Texto guía
+        ctx.font = 'bold 18px system-ui, -apple-system, Segoe UI, Roboto';
+        ctx.fillStyle = 'rgba(17,24,39,0.6)';
+        ctx.textAlign = 'center';
+        ctx.fillText('RASPÁ PARA REVELAR ✨', width / 2, height / 2);
+      }
+    }
+
+    function resetCover(image) {
+      const dims = setupHiDPICanvas(canvas);
+      ctx = dims.ctx; dpr = dims.dpr;
+      drawCoverPattern(image);
+      canvas.style.opacity = 1;
+      canvas.style.pointerEvents = 'auto';
+      cleared = false;
+      updateProgress(0);
+    }
+
+    function getCanvasPoint(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX ?? (e.touches && e.touches[0].clientX)) - rect.left;
+      const y = (e.clientY ?? (e.touches && e.touches[0].clientY)) - rect.top;
+      return { x, y };
+    }
+
+    function eraseDot(x, y) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.beginPath();
+      ctx.arc(x, y, BRUSH_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function eraseLine(x0, y0, x1, y1) {
+      const dist = Math.hypot(x1 - x0, y1 - y0);
+      const steps = Math.max(1, Math.ceil(dist / (BRUSH_RADIUS * 0.8)));
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        eraseDot(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+      }
+    }
+
+    function handlePointerDown(e) {
+      drawing = true;
+      canvas.style.cursor = 'grabbing';
+      const { x, y } = getCanvasPoint(e);
+      lastPoint = { x, y };
+      eraseDot(x, y);
+      e.preventDefault();
+    }
+
+    function handlePointerMove(e) {
+      if (!drawing) return;
+      const { x, y } = getCanvasPoint(e);
+      eraseLine(lastPoint.x, lastPoint.y, x, y);
+      lastPoint = { x, y };
+      e.preventDefault();
+    }
+
+    function handlePointerUp() {
+      drawing = false;
+      canvas.style.cursor = 'grab';
+      // Calcular progreso tras un pequeño respiro para rendimiento
+      requestAnimationFrame(checkRevealProgress);
+    }
+
+    function updateProgress(ratio) {
+      meterFill.style.width = `${Math.round(ratio * 100)}%`;
+    }
+
+    function checkRevealProgress() {
+      if (cleared) return;
+      const { width, height } = canvas.getBoundingClientRect();
+      // Leer a baja resolución para rendimiento
+      const sample = 4; // cada N px
+      const img = ctx.getImageData(0, 0, width, height).data;
+      let transparent = 0, total = 0;
+      for (let y = 0; y < height; y += sample) {
+        for (let x = 0; x < width; x += sample) {
+          const idx = ((y * width) + x) * 4 + 3; // canal alpha
+          if (img[idx] === 0) transparent++;
+          total++;
+        }
+      }
+      const ratio = transparent / total;
+      updateProgress(ratio);
+      if (ratio >= REVEAL_THRESHOLD) revealAll();
+    }
+
+    function revealAll() {
+      cleared = true;
+      // Efecto de desvanecimiento
+      canvas.style.transition = 'opacity .45s ease';
+      canvas.style.opacity = 0;
+      canvas.style.pointerEvents = 'none';
+    }
+
+    // Eventos (Pointer + Touch/Mobile fallback)
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    canvas.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    // Fallback para navegadores antiguos
+    canvas.addEventListener('mousedown', handlePointerDown);
+    canvas.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
+    canvas.addEventListener('touchstart', e => handlePointerDown(e.changedTouches ? e.changedTouches[0] : e), { passive: false });
+    canvas.addEventListener('touchmove', e => handlePointerMove(e.changedTouches ? e.changedTouches[0] : e), { passive: false });
+    window.addEventListener('touchend', handlePointerUp);
+
+    // Botones
+    resetBtn.addEventListener('click', () => resetCover(currentCoverImage));
+
+    let currentCoverImage = null;
+    coverUpload.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const img = new Image();
+      img.onload = () => { currentCoverImage = img; resetCover(img); };
+      img.src = URL.createObjectURL(file);
+    });
+
+    // Ajustar al cambiar tamaño de ventana
+    const ro = new ResizeObserver(() => resetCover(currentCoverImage));
+    ro.observe(document.getElementById('card'));
+
+    // Inicializar
+    window.addEventListener('load', () => resetCover());
+  </script>
+</body>
+</html>
+
+<body>
+</body>
+</html>
